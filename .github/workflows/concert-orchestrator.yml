@@ -567,6 +567,59 @@ jobs:
               return sub.data;
             }
 
+            // Helper: create a planning sub-issue (used by architecture→planning and ux→planning)
+            async function createPlanningSubIssue() {
+              const planBody = `## Role
+            You are a senior technical project planner. Your job is to decompose the
+            approved architecture into executable development tasks.
+
+            ## Context
+            - **Mission:** ${slug}
+            - **Branch:** ${branch}
+            - **Parent Issue:** #${issueNumber}
+            - **Upstream Documents:** All documents in \`.concert/missions/${slug}/\`
+
+            ## Task
+            1. Read all planning documents from branch \`${branch}\`
+            2. Decompose into phases, waves, and individual tasks
+            3. Create task files as \`.concert/missions/${slug}/phases/TASK-XX-<name>.md\`
+            4. Each task file must have YAML frontmatter with: id, title, wave, phase, depends, model_tier
+            5. Commit all task files to branch \`${branch}\`
+
+            ## Quality Criteria
+            - Tasks are small enough for a single Copilot session (< 500 lines changed)
+            - Dependencies between tasks are explicit
+            - Wave ordering allows maximum parallelism
+            - Model tiers assigned: opus (complex), sonnet (standard), haiku (simple)
+            - Each task has clear acceptance criteria
+
+            ## Task Frontmatter Format
+            \`\`\`yaml
+            ---
+            id: TASK-01
+            title: Project setup and configuration
+            wave: 1
+            phase: 1
+            depends: []
+            model_tier: haiku
+            ---
+            \`\`\`
+
+            <!-- concert-meta: {"stage": "planning", "parent": ${issueNumber}, "slug": "${slug}", "branch": "${branch}"} -->`;
+
+              const sub = await createSubIssue(
+                `📝 Plan Tasks — ${slug}`,
+                planBody,
+                ['concert/agent-work', 'concert/planning']
+              );
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: `🤖 Task planning started → #${sub.number}`,
+              });
+            }
+
             // ── Vision accepted → Generate Requirements ──
             if (stage === 'vision') {
               await transitionLabels(
@@ -713,55 +766,7 @@ jobs:
                   ['concert/planning-pending']
                 );
 
-                const planBody = `## Role
-            You are a senior technical project planner. Your job is to decompose the
-            approved architecture into executable development tasks.
-
-            ## Context
-            - **Mission:** ${slug}
-            - **Branch:** ${branch}
-            - **Parent Issue:** #${issueNumber}
-            - **Upstream Documents:** All documents in \`.concert/missions/${slug}/\`
-
-            ## Task
-            1. Read all planning documents from branch \`${branch}\`
-            2. Decompose into phases, waves, and individual tasks
-            3. Create task files as \`.concert/missions/${slug}/phases/TASK-XX-<name>.md\`
-            4. Each task file must have YAML frontmatter with: id, title, wave, phase, depends, model_tier
-            5. Commit all task files to branch \`${branch}\`
-
-            ## Quality Criteria
-            - Tasks are small enough for a single Copilot session (< 500 lines changed)
-            - Dependencies between tasks are explicit
-            - Wave ordering allows maximum parallelism
-            - Model tiers assigned: opus (complex), sonnet (standard), haiku (simple)
-            - Each task has clear acceptance criteria
-
-            ## Task Frontmatter Format
-            \`\`\`yaml
-            ---
-            id: TASK-01
-            title: Project setup and configuration
-            wave: 1
-            phase: 1
-            depends: []
-            model_tier: haiku
-            ---
-            \`\`\`
-
-            <!-- concert-meta: {"stage": "planning", "parent": ${issueNumber}, "slug": "${slug}", "branch": "${branch}"} -->`;
-
-                const sub = await createSubIssue(
-                  `📝 Plan Tasks — ${slug}`,
-                  planBody,
-                  ['concert/agent-work', 'concert/planning']
-                );
-
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner, repo: context.repo.repo,
-                  issue_number: issueNumber,
-                  body: `🤖 Task planning started → #${sub.number}`,
-                });
+                await createPlanningSubIssue();
               }
             }
 
@@ -772,53 +777,5 @@ jobs:
                 ['concert/planning-pending']
               );
 
-              const planBody = `## Role
-            You are a senior technical project planner. Your job is to decompose the
-            approved architecture into executable development tasks.
-
-            ## Context
-            - **Mission:** ${slug}
-            - **Branch:** ${branch}
-            - **Parent Issue:** #${issueNumber}
-            - **Upstream Documents:** All documents in \`.concert/missions/${slug}/\`
-
-            ## Task
-            1. Read all planning documents from branch \`${branch}\`
-            2. Decompose into phases, waves, and individual tasks
-            3. Create task files as \`.concert/missions/${slug}/phases/TASK-XX-<name>.md\`
-            4. Each task file must have YAML frontmatter with: id, title, wave, phase, depends, model_tier
-            5. Commit all task files to branch \`${branch}\`
-
-            ## Quality Criteria
-            - Tasks are small enough for a single Copilot session (< 500 lines changed)
-            - Dependencies between tasks are explicit
-            - Wave ordering allows maximum parallelism
-            - Model tiers assigned: opus (complex), sonnet (standard), haiku (simple)
-            - Each task has clear acceptance criteria
-
-            ## Task Frontmatter Format
-            \`\`\`yaml
-            ---
-            id: TASK-01
-            title: Project setup and configuration
-            wave: 1
-            phase: 1
-            depends: []
-            model_tier: haiku
-            ---
-            \`\`\`
-
-            <!-- concert-meta: {"stage": "planning", "parent": ${issueNumber}, "slug": "${slug}", "branch": "${branch}"} -->`;
-
-              const sub = await createSubIssue(
-                `📝 Plan Tasks — ${slug}`,
-                planBody,
-                ['concert/agent-work', 'concert/planning']
-              );
-
-              await github.rest.issues.createComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: issueNumber,
-                body: `🤖 Task planning started → #${sub.number}`,
-              });
+              await createPlanningSubIssue();
             }
