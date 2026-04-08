@@ -7,6 +7,8 @@ name: "🎵 Concert Execute"
 on:
   issues:
     types: [labeled, closed]
+  repository_dispatch:
+    types: [concert-advance]
 
 permissions:
   issues: write
@@ -405,3 +407,170 @@ jobs:
                 body: `🔧 Fix requested for **${meta.task_id}** (iteration ${iteration + 1}/${maxIterations}) → #${fixIssue.data.number}`,
               });
             }
+
+  # ─────────────────────────────────────────────────────────────
+  # DISPATCH — Handle planning-accepted from repository_dispatch
+  # Label events from GITHUB_TOKEN don't trigger other workflows,
+  # so concert-review dispatches this event after /accept on planning.
+  # ─────────────────────────────────────────────────────────────
+  dispatch-begin-execution:
+    if: >-
+      github.event_name == 'repository_dispatch' &&
+      github.event.action == 'concert-advance' &&
+      github.event.client_payload.accepted_stage == 'planning'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract mission metadata
+        id: meta
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = context.payload.client_payload.issue_number;
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+            });
+            const body = issue.body || '';
+            const slugMatch = body.match(/<!-- concert-slug: (.+?) -->/);
+            const branchMatch = body.match(/<!-- concert-branch: (.+?) -->/);
+            const slug = slugMatch ? slugMatch[1] : issue.title.replace(/🎵 Mission: /, '').toLowerCase().replace(/[^a-z0-9-]/g, '-');
+            const branch = branchMatch ? branchMatch[1] : `concert/${slug}`;
+            core.setOutput('slug', slug);
+            core.setOutput('branch', branch);
+            core.setOutput('parent_number', issueNumber);
+
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.branch }}
+
+      - name: Parse task files and create sub-issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const slug = '${{ steps.meta.outputs.slug }}';
+            const branch = '${{ steps.meta.outputs.branch }}';
+            const parentNumber = ${{ steps.meta.outputs.parent_number }};
+
+            const tasksDir = `.concert/missions/${slug}/phases`;
+            if (!fs.existsSync(tasksDir)) {
+              core.setFailed(`Tasks directory not found: ${tasksDir}`);
+              return;
+            }
+
+            // Read all task files
+            const taskFiles = fs.readdirSync(tasksDir)
+              .filter(f => f.startsWith('TASK-') && f.endsWith('.md'))
+              .sort();
+
+            const tasks = [];
+            for (const file of taskFiles) {
+              const content = fs.readFileSync(path.join(tasksDir, file), 'utf-8');
+
+              // Parse YAML frontmatter
+              const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+              if (!fmMatch) continue;
+
+              const fm = {};
+              fmMatch[1].split('\n').forEach(line => {
+                const [key, ...valueParts] = line.split(':');
+                if (key && valueParts.length) {
+                  const value = valueParts.join(':').trim();
+                  fm[key.trim()] = value;
+                }
+              });
+
+              // Extract body (everything after frontmatter)
+              const taskBody = content.replace(/^---\n[\s\S]*?\n---\n?/, '').trim();
+
+              tasks.push({
+                file,
+                id: fm.id || file.replace('.md', ''),
+                title: fm.title || file,
+                wave: parseInt(fm.wave || '1'),
+                phase: parseInt(fm.phase || '1'),
+                depends: fm.depends ? fm.depends.replace(/[\[\]]/g, '').split(',').map(d => d.trim()).filter(Boolean) : [],
+                model_tier: fm.model_tier || 'sonnet',
+                body: taskBody,
+              });
+            }
+
+            // Sort by wave then by ID
+            tasks.sort((a, b) => a.wave - b.wave || a.id.localeCompare(b.id));
+
+            // Transition labels
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: parentNumber, name: 'concert/planning-accepted',
+              });
+            } catch (e) {}
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: parentNumber, name: 'concert/planning-review',
+              });
+            } catch (e) {}
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: parentNumber, labels: ['concert/execution', 'concert/phase-1'],
+            });
+
+            // Create sub-issues for wave 1 tasks (assign to @copilot)
+            // Later waves will be dispatched as previous tasks complete
+            let createdCount = 0;
+            for (const task of tasks) {
+              const taskBody = `## Role
+            You are a senior software developer implementing a specific task using TDD.
+
+            ## Context
+            - **Mission:** ${slug}
+            - **Branch:** ${branch}
+            - **Parent Issue:** #${parentNumber}
+            - **Task:** ${task.id} — ${task.title}
+            - **Model Tier:** ${task.model_tier}
+
+            ## Task Description
+            ${task.body}
+
+            ## Development Process
+            1. Write failing tests first (Red)
+            2. Write minimal code to pass tests (Green)
+            3. Refactor for quality (Refactor)
+            4. Ensure all existing tests still pass
+            5. Commit to branch \`${branch}\`
+
+            ## Quality Criteria
+            - All tests pass
+            - No linting errors
+            - Code follows project conventions
+            - Changes are focused on this task only
+
+            <!-- concert-meta: {"stage": "task", "parent": ${parentNumber}, "slug": "${slug}", "branch": "${branch}", "task_id": "${task.id}", "wave": ${task.wave}, "model_tier": "${task.model_tier}", "depends": ${JSON.stringify(task.depends)}} -->`;
+
+              const labels = ['concert/task', `concert/wave-${task.wave}`];
+              const assignees = task.wave === 1 && task.depends.length === 0 ? ['copilot'] : [];
+
+              const subIssue = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title: `⚡ ${task.id}: ${task.title} — ${slug}`,
+                body: taskBody,
+                labels: labels,
+                assignees: assignees,
+              });
+
+              createdCount++;
+              core.info(`Created task issue #${subIssue.data.number}: ${task.id}`);
+            }
+
+            // Progress comment
+            const wave1Count = tasks.filter(t => t.wave === 1 && t.depends.length === 0).length;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: parentNumber,
+              body: `🚀 **Execution started!**\n\n- ${createdCount} task issues created\n- ${wave1Count} wave-1 tasks assigned to @copilot\n- Remaining tasks will be dispatched as dependencies complete`,
+            });

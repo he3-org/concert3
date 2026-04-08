@@ -10,7 +10,7 @@ on:
 
 permissions:
   issues: write
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
@@ -71,15 +71,22 @@ jobs:
                   body: `✅ **${stageName}** accepted! Advancing pipeline...`,
                 });
 
+                // Dispatch event to trigger orchestrator/execute workflows.
+                // Label events from GITHUB_TOKEN don't trigger other workflows,
+                // but repository_dispatch events do (they are an exception).
+                await github.rest.repos.createDispatchEvent({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  event_type: 'concert-advance',
+                  client_payload: {
+                    accepted_stage: stageName,
+                    issue_number: issue.number,
+                  },
+                });
+
                 found = true;
                 break;
               }
-            }
-
-            // Special case: planning-accepted triggers execution
-            if (labels.includes('concert/planning-review') || (!found && labels.includes('concert/planning-accepted'))) {
-              // This will be handled by concert-execute.yml
-              core.info('Planning accepted — execution will be triggered by concert-execute.yml');
             }
 
             if (!found) {
