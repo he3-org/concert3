@@ -10,6 +10,8 @@ name: "🎵 Concert Orchestrator"
 on:
   issues:
     types: [labeled, closed]
+  repository_dispatch:
+    types: [concert-advance]
 
 permissions:
   issues: write
@@ -502,3 +504,321 @@ jobs:
               issue_number: parentNumber,
               body: transition.message,
             });
+
+  # ─────────────────────────────────────────────────────────────
+  # DISPATCH ADVANCE — Handle repository_dispatch from concert-review
+  # Label events from GITHUB_TOKEN don't trigger other workflows,
+  # so concert-review dispatches this event after each /accept.
+  # ─────────────────────────────────────────────────────────────
+  dispatch-advance:
+    if: >-
+      github.event_name == 'repository_dispatch' &&
+      github.event.action == 'concert-advance' &&
+      contains(fromJSON('["vision","requirements","architecture","ux"]'), github.event.client_payload.accepted_stage)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Advance pipeline for accepted stage
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const stage = context.payload.client_payload.accepted_stage;
+            const issueNumber = context.payload.client_payload.issue_number;
+
+            // Fetch the mission issue
+            const { data: issue } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+            });
+
+            const body = issue.body || '';
+            const slugMatch = body.match(/<!-- concert-slug: (.+?) -->/);
+            const branchMatch = body.match(/<!-- concert-branch: (.+?) -->/);
+            const workflowMatch = body.match(/<!-- concert-workflow: (.+?) -->/);
+            const slug = slugMatch ? slugMatch[1] : issue.title.replace(/🎵 Mission: /, '').toLowerCase().replace(/[^a-z0-9-]/g, '-');
+            const branch = branchMatch ? branchMatch[1] : `concert/${slug}`;
+            const workflow = workflowMatch ? workflowMatch[1] : 'full';
+
+            // Helper: transition labels on the mission issue
+            async function transitionLabels(removeLabels, addLabels) {
+              for (const label of removeLabels) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner: context.repo.owner, repo: context.repo.repo,
+                    issue_number: issueNumber, name: label,
+                  });
+                } catch (e) { /* label may not exist */ }
+              }
+              if (addLabels.length > 0) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: issueNumber, labels: addLabels,
+                });
+              }
+            }
+
+            // Helper: create a sub-issue assigned to Copilot
+            async function createSubIssue(title, body, labels) {
+              const sub = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels,
+                assignees: ['copilot'],
+              });
+              return sub.data;
+            }
+
+            // ── Vision accepted → Generate Requirements ──
+            if (stage === 'vision') {
+              await transitionLabels(
+                ['concert/vision-draft', 'concert/vision-accepted'],
+                ['concert/requirements-pending']
+              );
+
+              const reqBody = `## Role
+            You are a senior requirements analyst. Your job is to transform a product
+            vision into comprehensive, testable requirements.
+
+            ## Context
+            - **Mission:** ${slug}
+            - **Branch:** ${branch}
+            - **Parent Issue:** #${issueNumber}
+            - **Upstream Document:** \`.concert/missions/${slug}/VISION.md\`
+
+            ## Task
+            1. Read the Vision document from the branch \`${branch}\`
+            2. Read the codebase to understand the current state
+            3. Generate \`REQUIREMENTS.md\` following the template at \`.concert/templates/REQUIREMENTS.md\`
+            4. Commit to branch \`${branch}\`
+
+            ## Quality Criteria
+            - Every functional requirement has a unique \`FR-XXX\` identifier
+            - Non-functional requirements cover: performance, security, scalability, accessibility
+            - Document ends with \`## Open Questions\` section with unresolved items as checkboxes
+            - All requirements are testable and measurable
+
+            ## Skills to Apply
+            Read and follow any relevant \`.concert/skills/\` if present.
+
+            <!-- concert-meta: {"stage": "requirements", "parent": ${issueNumber}, "slug": "${slug}", "branch": "${branch}"} -->`;
+
+              const sub = await createSubIssue(
+                `📋 Generate Requirements — ${slug}`,
+                reqBody,
+                ['concert/agent-work', 'concert/requirements']
+              );
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: `🤖 Requirements generation started → #${sub.number}\n\nCopilot will analyze the vision and generate comprehensive requirements.`,
+              });
+            }
+
+            // ── Requirements accepted → Generate Architecture ──
+            if (stage === 'requirements') {
+              await transitionLabels(
+                ['concert/requirements-accepted', 'concert/requirements-review'],
+                ['concert/architecture-pending']
+              );
+
+              const archBody = `## Role
+            You are a senior software architect. Your job is to design a system architecture
+            that fulfills the approved requirements.
+
+            ## Context
+            - **Mission:** ${slug}
+            - **Branch:** ${branch}
+            - **Parent Issue:** #${issueNumber}
+            - **Upstream Documents:**
+              - \`.concert/missions/${slug}/VISION.md\`
+              - \`.concert/missions/${slug}/REQUIREMENTS.md\`
+
+            ## Task
+            1. Read the Vision and Requirements documents from branch \`${branch}\`
+            2. Analyze the codebase for existing patterns and constraints
+            3. Generate \`ARCHITECTURE.md\` following the template at \`.concert/templates/ARCHITECTURE.md\`
+            4. Commit to branch \`${branch}\`
+
+            ## Quality Criteria
+            - Architecture addresses every FR-XXX requirement
+            - Clear component diagram with responsibilities
+            - Data flow and API contracts defined
+            - Technology choices justified
+            - Migration/rollback strategy included
+
+            <!-- concert-meta: {"stage": "architecture", "parent": ${issueNumber}, "slug": "${slug}", "branch": "${branch}"} -->`;
+
+              const sub = await createSubIssue(
+                `🏗️ Generate Architecture — ${slug}`,
+                archBody,
+                ['concert/agent-work', 'concert/architecture']
+              );
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: `🤖 Architecture generation started → #${sub.number}`,
+              });
+            }
+
+            // ── Architecture accepted → UX Design (full) or Planning (medium/small) ──
+            if (stage === 'architecture') {
+              if (workflow === 'full') {
+                await transitionLabels(
+                  ['concert/architecture-accepted'],
+                  ['concert/ux-pending']
+                );
+
+                const uxBody = `## Role
+            You are a senior UX designer. Your job is to create interaction and interface
+            specifications that implement the approved architecture.
+
+            ## Context
+            - **Mission:** ${slug}
+            - **Branch:** ${branch}
+            - **Parent Issue:** #${issueNumber}
+            - **Upstream Documents:**
+              - \`.concert/missions/${slug}/VISION.md\`
+              - \`.concert/missions/${slug}/REQUIREMENTS.md\`
+              - \`.concert/missions/${slug}/ARCHITECTURE.md\`
+
+            ## Task
+            1. Read all upstream documents from branch \`${branch}\`
+            2. Generate \`UX.md\` following the template at \`.concert/templates/UX.md\`
+            3. Commit to branch \`${branch}\`
+
+            ## Quality Criteria
+            - Every user-facing FR has a corresponding UX specification
+            - Accessibility requirements (WCAG 2.1 AA) addressed
+            - Responsive design breakpoints defined
+            - Error states and edge cases covered
+
+            <!-- concert-meta: {"stage": "ux", "parent": ${issueNumber}, "slug": "${slug}", "branch": "${branch}"} -->`;
+
+                const sub = await createSubIssue(
+                  `🎨 Generate UX Design — ${slug}`,
+                  uxBody,
+                  ['concert/agent-work', 'concert/ux']
+                );
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  body: `🤖 UX design generation started → #${sub.number}`,
+                });
+              } else {
+                // Skip UX for medium/small workflows — go directly to planning
+                await transitionLabels(
+                  ['concert/architecture-accepted'],
+                  ['concert/planning-pending']
+                );
+
+                const planBody = `## Role
+            You are a senior technical project planner. Your job is to decompose the
+            approved architecture into executable development tasks.
+
+            ## Context
+            - **Mission:** ${slug}
+            - **Branch:** ${branch}
+            - **Parent Issue:** #${issueNumber}
+            - **Upstream Documents:** All documents in \`.concert/missions/${slug}/\`
+
+            ## Task
+            1. Read all planning documents from branch \`${branch}\`
+            2. Decompose into phases, waves, and individual tasks
+            3. Create task files as \`.concert/missions/${slug}/phases/TASK-XX-<name>.md\`
+            4. Each task file must have YAML frontmatter with: id, title, wave, phase, depends, model_tier
+            5. Commit all task files to branch \`${branch}\`
+
+            ## Quality Criteria
+            - Tasks are small enough for a single Copilot session (< 500 lines changed)
+            - Dependencies between tasks are explicit
+            - Wave ordering allows maximum parallelism
+            - Model tiers assigned: opus (complex), sonnet (standard), haiku (simple)
+            - Each task has clear acceptance criteria
+
+            ## Task Frontmatter Format
+            \`\`\`yaml
+            ---
+            id: TASK-01
+            title: Project setup and configuration
+            wave: 1
+            phase: 1
+            depends: []
+            model_tier: haiku
+            ---
+            \`\`\`
+
+            <!-- concert-meta: {"stage": "planning", "parent": ${issueNumber}, "slug": "${slug}", "branch": "${branch}"} -->`;
+
+                const sub = await createSubIssue(
+                  `📝 Plan Tasks — ${slug}`,
+                  planBody,
+                  ['concert/agent-work', 'concert/planning']
+                );
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  body: `🤖 Task planning started → #${sub.number}`,
+                });
+              }
+            }
+
+            // ── UX accepted → Planning ──
+            if (stage === 'ux') {
+              await transitionLabels(
+                ['concert/ux-accepted', 'concert/planning-ready'],
+                ['concert/planning-pending']
+              );
+
+              const planBody = `## Role
+            You are a senior technical project planner. Your job is to decompose the
+            approved architecture into executable development tasks.
+
+            ## Context
+            - **Mission:** ${slug}
+            - **Branch:** ${branch}
+            - **Parent Issue:** #${issueNumber}
+            - **Upstream Documents:** All documents in \`.concert/missions/${slug}/\`
+
+            ## Task
+            1. Read all planning documents from branch \`${branch}\`
+            2. Decompose into phases, waves, and individual tasks
+            3. Create task files as \`.concert/missions/${slug}/phases/TASK-XX-<name>.md\`
+            4. Each task file must have YAML frontmatter with: id, title, wave, phase, depends, model_tier
+            5. Commit all task files to branch \`${branch}\`
+
+            ## Quality Criteria
+            - Tasks are small enough for a single Copilot session (< 500 lines changed)
+            - Dependencies between tasks are explicit
+            - Wave ordering allows maximum parallelism
+            - Model tiers assigned: opus (complex), sonnet (standard), haiku (simple)
+            - Each task has clear acceptance criteria
+
+            ## Task Frontmatter Format
+            \`\`\`yaml
+            ---
+            id: TASK-01
+            title: Project setup and configuration
+            wave: 1
+            phase: 1
+            depends: []
+            model_tier: haiku
+            ---
+            \`\`\`
+
+            <!-- concert-meta: {"stage": "planning", "parent": ${issueNumber}, "slug": "${slug}", "branch": "${branch}"} -->`;
+
+              const sub = await createSubIssue(
+                `📝 Plan Tasks — ${slug}`,
+                planBody,
+                ['concert/agent-work', 'concert/planning']
+              );
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: `🤖 Task planning started → #${sub.number}`,
+              });
+            }
