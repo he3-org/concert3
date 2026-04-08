@@ -131,7 +131,12 @@ jobs:
                 assignees: ['copilot'],
               });
             } catch (e) {
-              core.warning(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+              core.error(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: parentNumber,
+                body: `⚠️ **Pipeline stalled — could not assign Copilot to #${subIssue.data.number}**\n\nThe issue was created but Copilot could not be assigned as an agent. The pipeline will not advance until this is resolved.\n\n**To fix:** Manually assign \`copilot\` to #${subIssue.data.number}, or check that [Copilot Coding Agent](https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent) is enabled for this repository.\n\nError: \`${e.message}\``,
+              });
             }
 
             // Add as sub-issue to parent
@@ -238,7 +243,12 @@ jobs:
                 assignees: ['copilot'],
               });
             } catch (e) {
-              core.warning(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+              core.error(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: parentNumber,
+                body: `⚠️ **Pipeline stalled — could not assign Copilot to #${subIssue.data.number}**\n\nThe issue was created but Copilot could not be assigned as an agent. The pipeline will not advance until this is resolved.\n\n**To fix:** Manually assign \`copilot\` to #${subIssue.data.number}, or check that [Copilot Coding Agent](https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent) is enabled for this repository.\n\nError: \`${e.message}\``,
+              });
             }
 
             await github.rest.issues.createComment({
@@ -351,7 +361,12 @@ jobs:
                   assignees: ['copilot'],
                 });
               } catch (e) {
-                core.warning(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+                core.error(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: parentNumber,
+                  body: `⚠️ **Pipeline stalled — could not assign Copilot to #${subIssue.data.number}**\n\nThe issue was created but Copilot could not be assigned as an agent. The pipeline will not advance until this is resolved.\n\n**To fix:** Manually assign \`copilot\` to #${subIssue.data.number}, or check that [Copilot Coding Agent](https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent) is enabled for this repository.\n\nError: \`${e.message}\``,
+                });
               }
 
               await github.rest.issues.createComment({
@@ -472,7 +487,12 @@ jobs:
                 assignees: ['copilot'],
               });
             } catch (e) {
-              core.warning(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+              core.error(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: parentNumber,
+                body: `⚠️ **Pipeline stalled — could not assign Copilot to #${subIssue.data.number}**\n\nThe issue was created but Copilot could not be assigned as an agent. The pipeline will not advance until this is resolved.\n\n**To fix:** Manually assign \`copilot\` to #${subIssue.data.number}, or check that [Copilot Coding Agent](https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent) is enabled for this repository.\n\nError: \`${e.message}\``,
+              });
             }
 
             await github.rest.issues.createComment({
@@ -606,7 +626,12 @@ jobs:
                   assignees: ['copilot'],
                 });
               } catch (e) {
-                core.warning(`Could not assign copilot to #${sub.data.number}: ${e.message}`);
+                core.error(`Could not assign copilot to #${sub.data.number}: ${e.message}`);
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  body: `⚠️ **Pipeline stalled — could not assign Copilot to #${sub.data.number}**\n\nThe issue was created but Copilot could not be assigned as an agent. The pipeline will not advance until this is resolved.\n\n**To fix:** Manually assign \`copilot\` to #${sub.data.number}, or check that [Copilot Coding Agent](https://docs.github.com/en/copilot/using-github-copilot/using-copilot-coding-agent) is enabled for this repository.\n\nError: \`${e.message}\``,
+                });
               }
               return sub.data;
             }
