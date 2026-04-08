@@ -122,8 +122,17 @@ jobs:
               title: `📋 Generate Requirements — ${slug}`,
               body: body,
               labels: ['concert/agent-work', 'concert/requirements'],
-              assignees: ['copilot'],
             });
+
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: subIssue.data.number,
+                assignees: ['copilot'],
+              });
+            } catch (e) {
+              core.warning(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+            }
 
             // Add as sub-issue to parent
             await github.rest.issues.createComment({
@@ -220,8 +229,17 @@ jobs:
               title: `🏗️ Generate Architecture — ${slug}`,
               body: body,
               labels: ['concert/agent-work', 'concert/architecture'],
-              assignees: ['copilot'],
             });
+
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: subIssue.data.number,
+                assignees: ['copilot'],
+              });
+            } catch (e) {
+              core.warning(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+            }
 
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
@@ -324,8 +342,17 @@ jobs:
                 title: `🎨 Generate UX Design — ${slug}`,
                 body: body,
                 labels: ['concert/agent-work', 'concert/ux'],
-                assignees: ['copilot'],
               });
+
+              try {
+                await github.rest.issues.addAssignees({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: subIssue.data.number,
+                  assignees: ['copilot'],
+                });
+              } catch (e) {
+                core.warning(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+              }
 
               await github.rest.issues.createComment({
                 owner: context.repo.owner, repo: context.repo.repo,
@@ -436,8 +463,17 @@ jobs:
               title: `📝 Plan Tasks — ${slug}`,
               body: body,
               labels: ['concert/agent-work', 'concert/planning'],
-              assignees: ['copilot'],
             });
+
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: subIssue.data.number,
+                assignees: ['copilot'],
+              });
+            } catch (e) {
+              core.warning(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+            }
 
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
@@ -557,13 +593,21 @@ jobs:
               }
             }
 
-            // Helper: create a sub-issue assigned to Copilot
+            // Helper: create a sub-issue and attempt to assign to Copilot
             async function createSubIssue(title, body, labels) {
               const sub = await github.rest.issues.create({
                 owner: context.repo.owner, repo: context.repo.repo,
                 title, body, labels,
-                assignees: ['copilot'],
               });
+              try {
+                await github.rest.issues.addAssignees({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: sub.data.number,
+                  assignees: ['copilot'],
+                });
+              } catch (e) {
+                core.warning(`Could not assign copilot to #${sub.data.number}: ${e.message}`);
+              }
               return sub.data;
             }
 

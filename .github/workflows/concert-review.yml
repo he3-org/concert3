@@ -184,8 +184,17 @@ jobs:
               title: `${currentStage.emoji} Revise ${currentStage.stage} — ${slug}`,
               body: revisionBody,
               labels: ['concert/agent-work', `concert/${currentStage.stage}`, 'concert/revision'],
-              assignees: ['copilot'],
             });
+
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: subIssue.data.number,
+                assignees: ['copilot'],
+              });
+            } catch (e) {
+              core.warning(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+            }
 
             // Transition from review back to pending
             try {

@@ -154,15 +154,26 @@ jobs:
             <!-- concert-meta: {"stage": "task", "parent": ${parentNumber}, "slug": "${slug}", "branch": "${branch}", "task_id": "${task.id}", "wave": ${task.wave}, "model_tier": "${task.model_tier}", "depends": ${JSON.stringify(task.depends)}} -->`;
 
               const labels = ['concert/task', `concert/wave-${task.wave}`];
-              const assignees = task.wave === 1 && task.depends.length === 0 ? ['copilot'] : [];
+              const shouldAssign = task.wave === 1 && task.depends.length === 0;
 
               const subIssue = await github.rest.issues.create({
                 owner: context.repo.owner, repo: context.repo.repo,
                 title: `⚡ ${task.id}: ${task.title} — ${slug}`,
                 body: taskBody,
                 labels: labels,
-                assignees: assignees,
               });
+
+              if (shouldAssign) {
+                try {
+                  await github.rest.issues.addAssignees({
+                    owner: context.repo.owner, repo: context.repo.repo,
+                    issue_number: subIssue.data.number,
+                    assignees: ['copilot'],
+                  });
+                } catch (e) {
+                  core.warning(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+                }
+              }
 
               createdCount++;
               core.info(`Created task issue #${subIssue.data.number}: ${task.id}`);
@@ -230,8 +241,17 @@ jobs:
               title: `🔍 Review ${meta.task_id} — ${meta.slug}`,
               body: reviewBody,
               labels: ['concert/task-review', 'concert/agent-work'],
-              assignees: ['copilot'],
             });
+
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: reviewIssue.data.number,
+                assignees: ['copilot'],
+              });
+            } catch (e) {
+              core.warning(`Could not assign copilot to #${reviewIssue.data.number}: ${e.message}`);
+            }
 
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
@@ -332,12 +352,16 @@ jobs:
                 const allDepsComplete = deps.every(d => completedIds.has(d));
 
                 if (allDepsComplete) {
-                  await github.rest.issues.addAssignees({
-                    owner: context.repo.owner, repo: context.repo.repo,
-                    issue_number: taskIssue.number,
-                    assignees: ['copilot'],
-                  });
-                  core.info(`Dispatched task #${taskIssue.number}: ${tmeta.task_id}`);
+                  try {
+                    await github.rest.issues.addAssignees({
+                      owner: context.repo.owner, repo: context.repo.repo,
+                      issue_number: taskIssue.number,
+                      assignees: ['copilot'],
+                    });
+                    core.info(`Dispatched task #${taskIssue.number}: ${tmeta.task_id}`);
+                  } catch (e) {
+                    core.warning(`Could not assign copilot to #${taskIssue.number}: ${e.message}`);
+                  }
                 }
               }
 
@@ -398,8 +422,17 @@ jobs:
                 title: `🔧 Fix ${meta.task_id} review findings (iteration ${iteration + 1}) — ${meta.slug}`,
                 body: fixBody,
                 labels: ['concert/task', 'concert/fix'],
-                assignees: ['copilot'],
               });
+
+              try {
+                await github.rest.issues.addAssignees({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: fixIssue.data.number,
+                  assignees: ['copilot'],
+                });
+              } catch (e) {
+                core.warning(`Could not assign copilot to #${fixIssue.data.number}: ${e.message}`);
+              }
 
               await github.rest.issues.createComment({
                 owner: context.repo.owner, repo: context.repo.repo,
@@ -553,15 +586,26 @@ jobs:
             <!-- concert-meta: {"stage": "task", "parent": ${parentNumber}, "slug": "${slug}", "branch": "${branch}", "task_id": "${task.id}", "wave": ${task.wave}, "model_tier": "${task.model_tier}", "depends": ${JSON.stringify(task.depends)}} -->`;
 
               const labels = ['concert/task', `concert/wave-${task.wave}`];
-              const assignees = task.wave === 1 && task.depends.length === 0 ? ['copilot'] : [];
+              const shouldAssign = task.wave === 1 && task.depends.length === 0;
 
               const subIssue = await github.rest.issues.create({
                 owner: context.repo.owner, repo: context.repo.repo,
                 title: `⚡ ${task.id}: ${task.title} — ${slug}`,
                 body: taskBody,
                 labels: labels,
-                assignees: assignees,
               });
+
+              if (shouldAssign) {
+                try {
+                  await github.rest.issues.addAssignees({
+                    owner: context.repo.owner, repo: context.repo.repo,
+                    issue_number: subIssue.data.number,
+                    assignees: ['copilot'],
+                  });
+                } catch (e) {
+                  core.warning(`Could not assign copilot to #${subIssue.data.number}: ${e.message}`);
+                }
+              }
 
               createdCount++;
               core.info(`Created task issue #${subIssue.data.number}: ${task.id}`);
