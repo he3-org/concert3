@@ -6,13 +6,13 @@
 concert3 takes a high level idea description or file and expands and converts the idea into a proper vision document. This could be considered a new step at the begining of the workflow so that the vision document is also accepted and reviewed. If the idea was from a file, that file is no longer used. The main goal is to have concert create a strong vision for the user.
 
 ## Goals
-<!-- Fill in the specific goals for this mission -->
+Given a high level idea statement or file, comprehensively expand it, including web based research, into a strong vision to be the foundation for a concert mission.
 
 ## Non-Goals
-<!-- What is explicitly out of scope -->
+- Does not include detailed requirements, architecure, or ux unless explicitly asked for in the idea. 
 
 ## Success Criteria
-<!-- How will we know this mission succeeded? -->
+- [ ] Should create a vision document with all the proper formatting and necessary sections populated.
 
 ## Open Questions
 - [ ] Define specific success metrics
